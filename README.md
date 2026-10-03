@@ -242,3 +242,56 @@ This repository preserves the convolution-only 2D design. Attention, the 1D
 architecture, and the planned Weights & Biases runner are not included.
 Reversal extrapolation remains experimental; performance depends on training
 setup and is not guaranteed.
+
+## Experiments
+
+These are exploratory observations from earlier versions, not controlled
+multi-seed ablations. Model configurations and training budgets differed;
+the results describe the tested setups, not general architectural limitations.
+
+### Local attention
+
+We tested bidirectional local attention over continuous grid states, both alone
+and concatenated with convolution features before the update MLP. The
+attention-only trial used a 3×3 neighborhood, one 16-dimensional head, no
+positional encoding (NoPE), and no normalization. Artificial padded neighbors
+were masked out. Hybrid trials also explored a larger radius, learned radial
+bias, and soft caps on queries and keys.
+
+**Attention failed to provide a useful improvement in these trials.** Pure
+attention learned poorly: its saved 600-update checkpoint had validation MSE
+0.553 and semantic accuracy 8.26%; the run was stopped before its planned
+2,000 updates. Convolution plus attention did learn, but showed no convincing
+accuracy gain and required roughly 3–4 times more time per update in the
+observed implementation. This cost-benefit result motivated returning to
+convolution only. The implementation remains in the historical
+[attention-test branch](https://github.com/BoccheseGiacomo/ncpu-computer/tree/attention-test).
+
+The cause of the learning failure was not isolated. Content-only attention
+does not explicitly distinguish relative directions, unlike oriented
+convolution filters; ordering must instead be recovered from state, programs,
+and boundaries. Query/key scale may also affect optimization. These are
+possible contributors, not established explanations. Neighborhood gathering,
+attention scores, softmax, and aggregation add work at every evolution step.
+In particular, worse extrapolation than an older, longer-trained convolution
+run is **not** a fair demonstration that attention harms generalization.
+
+### Other unsuccessful routes
+
+- **Early fixed-geometry reversal:** fitting training lengths did not yield
+  robust longer-string extrapolation. Varying geometry and time, increasing
+  batch size, and training longer later improved the shared-tape baseline,
+  including partial reversal extrapolation; the early failures were not final.
+- **Learned symbol embeddings:** non-overlapping 3×3 symbol patches with tied
+  categorical readout did not produce useful reversal learning in the tried
+  setup. The project returned to direct scalar `0/1/B` injection.
+- **Separated input and output:** separate channels and two aligned spatial
+  tapes did not reliably solve longer-input reversal in the tested versions.
+  The simpler single-tape, shared-channel interface was retained.
+- **Tape-based addition:** early concatenated-operand experiments did not
+  learn reliably even in-distribution. They required operand alignment, carry
+  propagation, and overwriting the input with a variable-length result;
+  failure to extrapolate could not be separated from failure to learn.
+- **Softplus:** it performed worse than ReLU in the tried configurations,
+  including comparisons with leak disabled. This observation is not sufficient
+  to establish that Softplus is generally unsuitable for NCAs.
